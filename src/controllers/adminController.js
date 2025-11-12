@@ -1,8 +1,11 @@
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const Order = require("../models/Order");
 const Payment = require("../models/Payment");
 const Dish = require("../models/Dish");
 const Review = require("../models/Review");
+const MenuItem = require("../models/MenuItem");
+const UserPreference = require("../models/UserPreference");
 
 // Get all users
 exports.getAllUsers = async (req, res) => {
@@ -46,12 +49,164 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+// Get user by id with statistics
+exports.getUserById = async (req, res) => {
+  try {
+    const { id } = req.body || {};
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "ID người dùng không hợp lệ" });
+    }
+
+    const user = await User.findById(id).select("-password");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
+    }
+
+    const [orderSummary, preferences] = await Promise.all([
+      Order.aggregate([
+        { $match: { user: user._id } },
+        {
+          $group: {
+            _id: null,
+            totalOrders: { $sum: 1 },
+            completedOrders: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "completed"] }, 1, 0]
+              }
+            },
+            totalSpent: {
+              $sum: {
+                $cond: [
+                  { $in: ["$status", ["completed", "delivering", "ready", "preparing", "confirmed"]] },
+                  "$totalAmount",
+                  0
+                ]
+              }
+            }
+          }
+        }
+      ]),
+      UserPreference.findOne({ user: id })
+        .populate("favoriteDishes", "name thumbnail price")
+        .lean()
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        user,
+        stats: orderSummary[0] || { totalOrders: 0, completedOrders: 0, totalSpent: 0 },
+        preferences: preferences || null
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get orders for specific user
+exports.getUserOrders = async (req, res) => {
+  try {
+    const { id, status, paymentStatus, page = 1, limit = 20 } = { ...req.body, ...req.query };
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "ID người dùng không hợp lệ" });
+    }
+
+    const filter = { user: id };
+    if (status) filter.status = status;
+    if (paymentStatus) filter.paymentStatus = paymentStatus;
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .populate("items.dish", "name thumbnail price"),
+      Order.countDocuments(filter)
+    ]);
+
+    res.json({
+      success: true,
+      data: orders,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get all orders (admin overview)
+exports.getAllOrders = async (req, res) => {
+  try {
+    const {
+      status,
+      paymentStatus,
+      user,
+      method,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 20
+    } = req.query;
+
+    const filter = {};
+    if (status) filter.status = status;
+    if (paymentStatus) filter.paymentStatus = paymentStatus;
+    if (user && mongoose.Types.ObjectId.isValid(user)) {
+      filter.user = user;
+    }
+    if (method) filter.paymentMethod = method;
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) filter.createdAt.$gte = new Date(startDate);
+      if (endDate) filter.createdAt.$lte = new Date(endDate);
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .populate("user", "name email phone")
+        .populate("items.dish", "name thumbnail price"),
+      Order.countDocuments(filter)
+    ]);
+
+    res.json({
+      success: true,
+      data: orders,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Update user status
 exports.updateUserStatus = async (req, res) => {
   try {
-    const { status } = req.body;
+    const { id, status } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "ID người dùng không hợp lệ" });
+    }
     const user = await User.findByIdAndUpdate(
-      req.params.id,
+      id,
       { status },
       { new: true }
     ).select("-password");
@@ -69,9 +224,12 @@ exports.updateUserStatus = async (req, res) => {
 // Update user roles
 exports.updateUserRoles = async (req, res) => {
   try {
-    const { roles } = req.body;
+    const { id, roles } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "ID người dùng không hợp lệ" });
+    }
     const user = await User.findByIdAndUpdate(
-      req.params.id,
+      id,
       { roles },
       { new: true }
     ).select("-password");

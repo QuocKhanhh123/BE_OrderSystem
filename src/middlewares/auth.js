@@ -9,7 +9,7 @@ const auth = (roles = []) => {
             const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
             req.user = decoded;
             if (roles.length && !roles.some(r => decoded.roles.includes(r))) {
-                return res.status(403).json({ message: "Forbidden: insufficient rights" });
+                return res.status(403).json({ message: "Không có quyền truy cập API này" });
             }
             next();
         } catch (err) {
