@@ -11,7 +11,6 @@ function generateAppTransId() {
 }
 
 async function postJson(url, payload) {
-    // Sử dụng fetch nếu có, fallback về https.request
     if (typeof fetch === 'function') {
         const res = await fetch(url, {
             method: 'POST',
@@ -82,7 +81,6 @@ exports.createZaloPayment = async (req, res) => {
             redirecturl:`${process.env.FRONTEND_URL}/order-status/${app_trans_id}`
         });
 
-        // items: build from order.items
         const items = (order.items || []).map(it => ({ itemid: it.dish?.toString?.() || '', itemname: it.name, itemprice: it.price, itemquantity: it.quantity }));
 
         const zaloOrder = {
@@ -106,7 +104,6 @@ exports.createZaloPayment = async (req, res) => {
             return res.status(200).json({ success: true, message: 'Khởi tạo thanh toán ZaloPay thành công', order_url: result.order_url, payment });
         }
 
-        // nếu lỗi, cập nhật trạng thái payment
         payment.status = 'failed';
         payment.gatewayResponse = result;
         await payment.save();
