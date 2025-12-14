@@ -105,7 +105,6 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-// Get orders for specific user
 exports.getUserOrders = async (req, res) => {
   try {
     const { id, status, paymentStatus, page = 1, limit = 20 } = { ...req.body, ...req.query };
@@ -371,6 +370,7 @@ exports.getDashboardOverview = async (req, res) => {
       totalDishes,
       totalOrders,
       todayOrders,
+      completedOrders,
       totalRevenue,
       pendingOrders,
       averageRating
@@ -379,15 +379,26 @@ exports.getDashboardOverview = async (req, res) => {
       Dish.countDocuments(),
       Order.countDocuments(),
       Order.countDocuments({ createdAt: { $gte: today } }),
+      Order.countDocuments({
+        $or: [
+          { paymentStatus: "paid" },
+          { status: { $in: ["confirmed", "preparing", "ready", "delivering", "completed"] } }
+        ]
+      }),
       Order.aggregate([
-        { $match: { status: "completed", paymentStatus: "paid" } },
+        {
+          $match: {
+            status: { $in: ["confirmed", "preparing", "ready", "delivering", "completed"] }
+          }
+        },
         { $group: { _id: null, total: { $sum: "$totalAmount" } } }
       ]),
-      Order.countDocuments({ status: { $in: ["pending", "confirmed", "preparing"] } }),
+      Order.countDocuments({ status: "pending" }),
       Review.aggregate([
         { $group: { _id: null, avgRating: { $avg: "$rating" } } }
       ])
     ]);
+
 
     res.json({
       success: true,
@@ -396,6 +407,7 @@ exports.getDashboardOverview = async (req, res) => {
         totalDishes,
         totalOrders,
         todayOrders,
+        completedOrders,
         totalRevenue: totalRevenue[0]?.total || 0,
         pendingOrders,
         averageRating: averageRating[0]?.avgRating || 0
