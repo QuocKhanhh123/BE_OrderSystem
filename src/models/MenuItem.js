@@ -35,11 +35,35 @@ const MenuItemSchema = new mongoose.Schema({
     price: { type: Number, required: true, min: 0 },
     discountPrice: { type: Number, default: null, min: 0 },
     discountStartAt: { type: Date, default: null },
-    discountEndAt: { type: Date, default: null }
+    discountEndAt: { type: Date, default: null },
+
+    embedding: { type: [Number], default: null }
 }, {
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true }
+});
+
+MenuItemSchema.pre("save", async function (next) {
+    if (this.isNew || this.isModified("name") || this.isModified("description") || this.isModified("category") || this.isModified("ingredients") || this.isModified("tags") || this.isModified("type")) {
+        try {
+            const OpenAI = require("openai");
+            const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+            
+            const ingredients = this.ingredients?.join(", ") || "";
+            const tags = this.tags?.join(", ") || "";
+            const textToEmbed = `${this.name}. ${this.description}. Loại: ${this.category}. ${this.type}. ${ingredients ? `Thành phần: ${ingredients}.` : ""} ${tags ? `Tags: ${tags}.` : ""}`.trim();
+            
+            const response = await openai.embeddings.create({
+                model: "text-embedding-3-small",
+                input: textToEmbed
+            });
+            this.embedding = response.data[0].embedding;
+        } catch (error) {
+            console.error("Lỗi tạo embedding:", error.message);
+        }
+    }
+    next();
 });
 
 MenuItemSchema.pre("validate", function (next) {

@@ -19,7 +19,7 @@ async function listMenuItems(req, res) {
             ];
         }
 
-        let items = await MenuItem.find(q).sort({ createdAt: -1 });
+        let items = await MenuItem.find(q).select("-embedding").sort({ createdAt: -1 });
 
         if (activeDiscount === "true") items = items.filter((it) => it.isDiscountActive);
         if (activeDiscount === "false") items = items.filter((it) => !it.isDiscountActive);
@@ -37,7 +37,7 @@ async function getMenuItemById(req, res) {
         if (!mongoose.isValidObjectId(id)) {
             return res.status(400).json({ message: "id không hợp lệ" });
         }
-        const item = await MenuItem.findById(id);
+        const item = await MenuItem.findById(id).select("-embedding");
         if (!item) return res.status(404).json({ message: "Không tìm thấy món" });
         res.json(item);
     } catch (err) {
@@ -67,7 +67,7 @@ async function updateMenuItem(req, res) {
         const updated = await MenuItem.findByIdAndUpdate(
             id,
             { $set: req.body },
-            { new: true, runValidators: true }
+            { new: true, runValidators: true, select: "-embedding" }
         );
         if (!updated) return res.status(404).json({ message: "Không tìm thấy món" });
 

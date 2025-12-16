@@ -10,7 +10,7 @@ exports.createOrderFromCart = async (req, res) => {
         const notes = "" ;
 
         // Lấy giỏ hàng
-        const cart = await Cart.findOne({ user: userId }).populate("items.menuItem");
+        const cart = await Cart.findOne({ user: userId }).populate("items.menuItem", "-embedding");
         
         if (!cart || cart.items.length === 0) {
             return res.status(400).json({

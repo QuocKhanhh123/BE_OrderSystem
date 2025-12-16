@@ -33,7 +33,7 @@ exports.addToCart = async (req, res) => {
         const { menuItemId, quantity, notes } = req.body;
 
         // Kiểm tra món ăn có tồn tại không
-        const menuItem = await MenuItem.findById(menuItemId);
+        const menuItem = await MenuItem.findById(menuItemId).select("-embedding");
         if (!menuItem) {
             return res.status(404).json({
                 success: false,
